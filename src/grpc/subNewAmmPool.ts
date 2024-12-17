@@ -96,20 +96,20 @@ async function callback(data: any, programId: string) {
       const baseIsSol = accounts[keyIndex[8]] == 'So11111111111111111111111111111111111111112';
       console.log('pool deets:', accounts[keyIndex[4]], accounts[keyIndex[16]], accounts[keyIndex[8]], accounts[keyIndex[9]], accounts[keyIndex[10]], accounts[keyIndex[11]])
       fs.appendFileSync('pooldeets.log', `pool deets: ${accounts[keyIndex[4]]} - ${accounts[keyIndex[16]]} - ${accounts[keyIndex[8]]} - ${accounts[keyIndex[9]]} - ${accounts[keyIndex[10]]} - ${accounts[keyIndex[11]]} ` + '\n')
-      // for (let i = 0; i < 5; i++) {
-      //   executeBuys(
-      //     new PublicKey(accounts[keyIndex[4]]),
-      //     new PublicKey(accounts[keyIndex[baseIsSol ? 11 : 10]]),
-      //     new PublicKey(accounts[keyIndex[baseIsSol ? 10 : 11]]),
-      //     new PublicKey(accounts[keyIndex[baseIsSol ? 9 : 8]])
-      //   ).catch((err) => console.log('executeBuys error:', err));
-      //   // sleep 550 ms
-      //   await new Promise<void>((resolve) => {
-      //     setTimeout(() => {
-      //       resolve();
-      //     }, 550);
-      //   });
-      // }
+      for (let i = 0; i < 5; i++) {
+        executeBuys(
+          new PublicKey(accounts[keyIndex[4]]),
+          new PublicKey(accounts[keyIndex[baseIsSol ? 11 : 10]]),
+          new PublicKey(accounts[keyIndex[baseIsSol ? 10 : 11]]),
+          new PublicKey(accounts[keyIndex[baseIsSol ? 9 : 8]])
+        ).catch((err) => console.log('executeBuys error:', err));
+        // sleep 550 ms
+        await new Promise<void>((resolve) => {
+          setTimeout(() => {
+            resolve();
+          }, 550);
+        });
+      }
     }
 
     // const [baseMintAccount, quoteMintAccount, marketAccount] = await connection.getMultipleAccountsInfo([
