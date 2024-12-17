@@ -1,8 +1,13 @@
 import { ApiPoolInfoV4, Market, MARKET_STATE_LAYOUT_V3, SPL_MINT_LAYOUT } from "@raydium-io/raydium-sdk-v2";
-import { PublicKey } from '@solana/web3.js';
+import { Keypair, PublicKey } from '@solana/web3.js';
 import Client from "@triton-one/yellowstone-grpc";
 import base58 from "bs58";
 import { connection, grpcToken, grpcUrl } from "../config";
+import fs from 'fs';
+import { executeBuys } from "./buyInstructionsRaydium";
+
+const filename = 'new-pool-info.json';
+const mint = process.env.MINT || 'NO MINT';
 
 async function subNewAmmPool() {
   const programId = '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8'
@@ -10,9 +15,11 @@ async function subNewAmmPool() {
 
   const client = new Client(grpcUrl, grpcToken, undefined);
   const rpcConnInfo = await client.subscribe();
-
   rpcConnInfo.on("data", (data) => {
     callback(data, programId)
+      .catch((reason) => {
+        console.error(reason);
+      });
   });
 
   await new Promise<void>((resolve, reject) => {
@@ -52,6 +59,13 @@ async function callback(data: any, programId: string) {
   const info = data.transaction
   if (info.transaction.meta.err !== undefined) return undefined
 
+  try {
+    console.log('new pool info:', JSON.stringify(info))
+    fs.appendFileSync(filename, JSON.stringify(info, null, 2) + '\n')
+  } catch (error) {
+    console.error(error)
+  }
+
   const formatData: {
     updateTime: number, slot: number, txid: string, poolInfos: ApiPoolInfoV4[]
   } = {
@@ -60,6 +74,7 @@ async function callback(data: any, programId: string) {
     txid: base58.encode(info.transaction.signature),
     poolInfos: []
   }
+
 
   const accounts = info.transaction.transaction.message.accountKeys.map((i: Buffer) => base58.encode(i))
   for (const item of [...info.transaction.transaction.message.instructions, ...info.transaction.meta.innerInstructions.map((i: any) => i.instructions).flat()]) {
@@ -71,52 +86,78 @@ async function callback(data: any, programId: string) {
 
     const startTime = new Date().getTime()
     console.log(new Date().toJSON(), 'new pool Id: ', accounts[keyIndex[4]]);
+    fs.appendFileSync(filename, accounts[keyIndex[4]] + '\n')
+    console.log('accounts:', JSON.stringify(accounts, null, 2))
+    fs.appendFileSync(filename, JSON.stringify(accounts, null, 2) + '\n')
+    console.log(`baseMint: ${accounts[keyIndex[8]]}, quoteMint: ${accounts[keyIndex[9]]}, marketId: ${accounts[keyIndex[16]]} baseVault: ${accounts[keyIndex[10]]} quoteVault: ${accounts[keyIndex[11]]}`)
+    fs.appendFileSync(filename, `mandatory accounts baseMint: ${accounts[keyIndex[8]]}, quoteMint: ${accounts[keyIndex[9]]}, marketId: ${accounts[keyIndex[16]]}` + '\n')
 
-    const [baseMintAccount, quoteMintAccount, marketAccount] = await connection.getMultipleAccountsInfo([
-      new PublicKey(accounts[keyIndex[8]]),
-      new PublicKey(accounts[keyIndex[9]]),
-      new PublicKey(accounts[keyIndex[16]]),
-    ])
+    if (accounts[keyIndex[9]] == mint || accounts[keyIndex[8]] == mint) {
+      const baseIsSol = accounts[keyIndex[8]] == 'So11111111111111111111111111111111111111112';
+      console.log('pool deets:', accounts[keyIndex[4]], accounts[keyIndex[16]], accounts[keyIndex[8]], accounts[keyIndex[9]], accounts[keyIndex[10]], accounts[keyIndex[11]])
+      fs.appendFileSync('pooldeets.log', `pool deets: ${accounts[keyIndex[4]]} - ${accounts[keyIndex[16]]} - ${accounts[keyIndex[8]]} - ${accounts[keyIndex[9]]} - ${accounts[keyIndex[10]]} - ${accounts[keyIndex[11]]} ` + '\n')
+      // for (let i = 0; i < 5; i++) {
+      //   executeBuys(
+      //     new PublicKey(accounts[keyIndex[4]]),
+      //     new PublicKey(accounts[keyIndex[baseIsSol ? 11 : 10]]),
+      //     new PublicKey(accounts[keyIndex[baseIsSol ? 10 : 11]]),
+      //     new PublicKey(accounts[keyIndex[baseIsSol ? 9 : 8]])
+      //   ).catch((err) => console.log('executeBuys error:', err));
+      //   // sleep 550 ms
+      //   await new Promise<void>((resolve) => {
+      //     setTimeout(() => {
+      //       resolve();
+      //     }, 550);
+      //   });
+      // }
+    }
 
-    if (baseMintAccount === null || quoteMintAccount === null || marketAccount === null) throw Error('get account info error')
+    // const [baseMintAccount, quoteMintAccount, marketAccount] = await connection.getMultipleAccountsInfo([
+    //   new PublicKey(accounts[keyIndex[8]]),
+    //   new PublicKey(accounts[keyIndex[9]]),
+    //   new PublicKey(accounts[keyIndex[16]]),
+    // ])
 
-    const baseMintInfo = SPL_MINT_LAYOUT.decode(baseMintAccount.data)
-    const quoteMintInfo = SPL_MINT_LAYOUT.decode(quoteMintAccount.data)
-    const marketInfo = MARKET_STATE_LAYOUT_V3.decode(marketAccount.data)
+  // if (baseMintAccount === null || quoteMintAccount === null || marketAccount === null) throw Error(`get account info error ${baseMintAccount} | ${quoteMintAccount} | ${marketAccount}`)
 
-    formatData.poolInfos.push({
-      id: accounts[keyIndex[4]],
-      baseMint: accounts[keyIndex[8]],
-      quoteMint: accounts[keyIndex[9]],
-      lpMint: accounts[keyIndex[7]],
-      baseDecimals: baseMintInfo.decimals,
-      quoteDecimals: quoteMintInfo.decimals,
-      lpDecimals: baseMintInfo.decimals,
-      version: 4,
-      programId: programId,
-      authority: accounts[keyIndex[5]],
-      openOrders: accounts[keyIndex[6]],
-      targetOrders: accounts[keyIndex[12]],
-      baseVault: accounts[keyIndex[10]],
-      quoteVault: accounts[keyIndex[11]],
-      withdrawQueue: PublicKey.default.toString(),
-      lpVault: PublicKey.default.toString(),
-      marketVersion: 3,
-      marketProgramId: marketAccount.owner.toString(),
-      marketId: accounts[keyIndex[16]],
-      marketAuthority: Market.getAssociatedAuthority({ programId: marketAccount.owner, marketId: new PublicKey(accounts[keyIndex[16]]) }).publicKey.toString(),
-      marketBaseVault: marketInfo.baseVault.toString(),
-      marketQuoteVault: marketInfo.quoteVault.toString(),
-      marketBids: marketInfo.bids.toString(),
-      marketAsks: marketInfo.asks.toString(),
-      marketEventQueue: marketInfo.eventQueue.toString(),
-      lookupTableAccount: PublicKey.default.toString()
-    })
+  //   const baseMintInfo = SPL_MINT_LAYOUT.decode(baseMintAccount.data)
+  //   const quoteMintInfo = SPL_MINT_LAYOUT.decode(quoteMintAccount.data)
+  //   const marketInfo = MARKET_STATE_LAYOUT_V3.decode(marketAccount.data)
+
+  //   formatData.poolInfos.push({
+  //     id: accounts[keyIndex[4]],
+  //     baseMint: accounts[keyIndex[8]],
+  //     quoteMint: accounts[keyIndex[9]],
+  //     lpMint: accounts[keyIndex[7]],
+  //     baseDecimals: baseMintInfo.decimals,
+  //     quoteDecimals: quoteMintInfo.decimals,
+  //     lpDecimals: baseMintInfo.decimals,
+  //     version: 4,
+  //     programId: programId,
+  //     authority: accounts[keyIndex[5]],
+  //     openOrders: accounts[keyIndex[6]],
+  //     targetOrders: accounts[keyIndex[12]],
+  //     baseVault: accounts[keyIndex[10]],
+  //     quoteVault: accounts[keyIndex[11]],
+  //     withdrawQueue: PublicKey.default.toString(),
+  //     lpVault: PublicKey.default.toString(),
+  //     marketVersion: 3,
+  //     marketProgramId: marketAccount.owner.toString(),
+  //     marketId: accounts[keyIndex[16]],
+  //     marketAuthority: Market.getAssociatedAuthority({ programId: marketAccount.owner, marketId: new PublicKey(accounts[keyIndex[16]]) }).publicKey.toString(),
+  //     marketBaseVault: marketInfo.baseVault.toString(),
+  //     marketQuoteVault: marketInfo.quoteVault.toString(),
+  //     marketBids: marketInfo.bids.toString(),
+  //     marketAsks: marketInfo.asks.toString(),
+  //     marketEventQueue: marketInfo.eventQueue.toString(),
+  //     lookupTableAccount: PublicKey.default.toString()
+  //   })
   }
 
-  console.log(formatData)
+  // console.log(formatData)
 
-  return formatData
+  // // await multiswap(formatData.poolInfos);
+  // return formatData
 }
 
 subNewAmmPool()

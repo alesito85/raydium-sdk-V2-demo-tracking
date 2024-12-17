@@ -11,12 +11,15 @@
     "@types/jsonfile": "^6.1.4",
     "bs58": "^5.0.0",
     "decimal.js": "^10.4.3",
+    "dotenv": "^16.4.7",
     "jsonfile": "^6.1.0",
+    "promise-retry": "^2.0.1",
     "ts-node": "^10.9.1",
     "typescript": "^5.3.3"
   },
   "devDependencies": {
     "@types/bn.js": "^5.1.5",
+    "@types/promise-retry": "^1.1.6",
     "npm-check-updates": "^16.14.11"
   },
   "scripts": {
