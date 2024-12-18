@@ -12,6 +12,7 @@
     "bs58": "^5.0.0",
     "decimal.js": "^10.4.3",
     "dotenv": "^16.4.7",
+    "ioredis": "^5.4.1",
     "jsonfile": "^6.1.0",
     "promise-retry": "^2.0.1",
     "ts-node": "^10.9.1",

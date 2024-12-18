@@ -28,8 +28,8 @@ import {
     console.log({connectionUrl})
     const connection = new Connection(connectionUrl);
     console.log('initial send...')
-    fs.appendFileSync('txStuff', 'initial send...')
-    fs.appendFileSync('txStuff', serializedTransaction.toString('hex'))
+    fs.appendFileSync('txStuff.log', 'initial send...' + '\n')
+    fs.appendFileSync('txStuff.log', serializedTransaction.toString('hex') + '\n')
     const txid = await connection.sendRawTransaction(
       serializedTransaction,
       SEND_OPTIONS
@@ -44,7 +44,7 @@ import {
         if (abortSignal.aborted) return;
         try {
           console.log('sending...')
-          fs.appendFileSync('txStuff', 'sending...')
+          fs.appendFileSync('txStuff.log', 'sending...' + '\n')
           await connection.sendRawTransaction(
             serializedTransaction,
             SEND_OPTIONS

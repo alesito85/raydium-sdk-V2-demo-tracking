@@ -6,8 +6,10 @@ import { connection, grpcToken, grpcUrl } from "../config";
 import fs from 'fs';
 import { executeBuys } from "./buyInstructionsRaydium";
 
-const filename = 'new-pool-info.json';
+const filename = 'new-pool-info.log';
 const mint = process.env.MINT || 'NO MINT';
+
+const concurrentOrders = parseInt(process.env.CONCURRENT_ORDERS || '1');
 
 async function subNewAmmPool() {
   const programId = '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8'
@@ -60,7 +62,7 @@ async function callback(data: any, programId: string) {
   if (info.transaction.meta.err !== undefined) return undefined
 
   try {
-    console.log('new pool info:', JSON.stringify(info))
+    // console.log('new pool info:', JSON.stringify(info))
     fs.appendFileSync(filename, JSON.stringify(info, null, 2) + '\n')
   } catch (error) {
     console.error(error)
@@ -85,24 +87,57 @@ async function callback(data: any, programId: string) {
     const keyIndex = [...(item.accounts as Buffer).values()]
 
     const startTime = new Date().getTime()
-    console.log(new Date().toJSON(), 'new pool Id: ', accounts[keyIndex[4]]);
+    console.log(new Date().toJSON(), 'new pool Id: ', accounts[keyIndex[4]], JSON.stringify(keyIndex));
+    fs.appendFileSync(filename, JSON.stringify(keyIndex) + '\n')
     fs.appendFileSync(filename, accounts[keyIndex[4]] + '\n')
     console.log('accounts:', JSON.stringify(accounts, null, 2))
     fs.appendFileSync(filename, JSON.stringify(accounts, null, 2) + '\n')
     console.log(`baseMint: ${accounts[keyIndex[8]]}, quoteMint: ${accounts[keyIndex[9]]}, marketId: ${accounts[keyIndex[16]]} baseVault: ${accounts[keyIndex[10]]} quoteVault: ${accounts[keyIndex[11]]}`)
     fs.appendFileSync(filename, `mandatory accounts baseMint: ${accounts[keyIndex[8]]}, quoteMint: ${accounts[keyIndex[9]]}, marketId: ${accounts[keyIndex[16]]}` + '\n')
 
-    if (accounts[keyIndex[9]] == mint || accounts[keyIndex[8]] == mint) {
-      const baseIsSol = accounts[keyIndex[8]] == 'So11111111111111111111111111111111111111112';
-      console.log('pool deets:', accounts[keyIndex[4]], accounts[keyIndex[16]], accounts[keyIndex[8]], accounts[keyIndex[9]], accounts[keyIndex[10]], accounts[keyIndex[11]])
-      fs.appendFileSync('pooldeets.log', `pool deets: ${accounts[keyIndex[4]]} - ${accounts[keyIndex[16]]} - ${accounts[keyIndex[8]]} - ${accounts[keyIndex[9]]} - ${accounts[keyIndex[10]]} - ${accounts[keyIndex[11]]} ` + '\n')
-      for (let i = 0; i < 5; i++) {
+    if (accounts[keyIndex[9]] == mint || accounts[keyIndex[8]] == mint || true) {
+      const serumProgramId = new PublicKey('9xQeWvG816bUxViG6K51VdK5W2j9mWr6Uay3e3cL1Dve');
+      const serumMarket = accounts[keyIndex[16]];
+      const serumMarketPubkey = new PublicKey(serumMarket);
+      // const bidsAccount = PublicKey.createProgramAddressSync(
+      //   [serumMarketPubkey.toBuffer(), Buffer.from('bids')],
+      //   serumProgramId
+      // );
+      let baseIsSol = accounts[keyIndex[8]] == 'So11111111111111111111111111111111111111112';
+      const poolDeets = {
+        poolId: accounts[keyIndex[4]],
+        marketId: accounts[keyIndex[16]],
+        baseMint: accounts[keyIndex[8]],
+        quoteMint: accounts[keyIndex[9]],
+        baseVault: accounts[keyIndex[10]],
+        quoteVault: accounts[keyIndex[11]],
+        ammOpenOrders: accounts[keyIndex[6]],
+        ammTargetOrders: accounts[keyIndex[12]],
+        serumMarket,
+        // serumBids: ,
+        // serumAsks: ,
+        // serumEventQueue: accounts[keyIndex[15]],
+        // serumCoinVault: accounts[keyIndex[17]],
+        // serumPcVault: accounts[keyIndex[18]],
+        // serumVaultSigner: accounts[keyIndex[19]],
+      };
+      console.log('pool deets:', JSON.stringify(poolDeets, null, 2))
+      fs.appendFileSync('pooldeets.log', `pool deets: ${JSON.stringify(poolDeets)} ` + '\n')
+      for (let i = 0; i < concurrentOrders; i++) {
         executeBuys(
           new PublicKey(accounts[keyIndex[4]]),
           new PublicKey(accounts[keyIndex[baseIsSol ? 11 : 10]]),
           new PublicKey(accounts[keyIndex[baseIsSol ? 10 : 11]]),
           new PublicKey(accounts[keyIndex[baseIsSol ? 9 : 8]])
         ).catch((err) => console.log('executeBuys error:', err));
+        if (process.env.PLACE_BOTH_SIDES) {
+          executeBuys(
+            new PublicKey(accounts[keyIndex[4]]),
+            new PublicKey(accounts[keyIndex[!baseIsSol ? 11 : 10]]),
+            new PublicKey(accounts[keyIndex[!baseIsSol ? 10 : 11]]),
+            new PublicKey(accounts[keyIndex[!baseIsSol ? 9 : 8]])
+          ).catch((err) => console.log('executeBuys! error:', err));
+        }
         // sleep 550 ms
         await new Promise<void>((resolve) => {
           setTimeout(() => {
