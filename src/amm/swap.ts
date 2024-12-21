@@ -5,9 +5,10 @@ import { isValidAmm } from './utils'
 import Decimal from 'decimal.js'
 import { NATIVE_MINT } from '@solana/spl-token'
 import { printSimulateInfo } from '../util'
+import { owner } from '../config'
 
 export const swap = async () => {
-  const raydium = await initSdk()
+  const raydium = await initSdk(owner)
   const amountIn = 500
   const inputMint = NATIVE_MINT.toBase58()
   const poolId = '58oQChx4yWmvKdwLLZzBi4ChoCc2fqCUWBkwMihLYQo2' // SOL-USDC pool
@@ -31,6 +32,8 @@ export const swap = async () => {
     poolKeys = data.poolKeys
     rpcData = data.poolRpcData
   }
+
+  if (!poolInfo || !poolKeys) throw new Error('pool not found')
   const [baseReserve, quoteReserve, status] = [rpcData.baseReserve, rpcData.quoteReserve, rpcData.status.toNumber()]
 
   if (poolInfo.mintA.address !== inputMint && poolInfo.mintB.address !== inputMint)
@@ -87,6 +90,7 @@ export const swap = async () => {
       microLamports: 46591500,
     },
   })
+  console.log({execute})
 
   printSimulateInfo()
   // don't want to wait confirm, set sendAndConfirm to false or don't pass any params to execute

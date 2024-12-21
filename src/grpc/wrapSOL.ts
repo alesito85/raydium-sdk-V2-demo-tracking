@@ -13,7 +13,7 @@ const main = async () => {
   await Promise.all(
     Object.keys(owners).map(async (owner) => {
       try {
-        const userOwner = Keypair.fromSecretKey(bs58.decode(process.env.DEPLOYER_PRIVATE_KEY || ''));
+        const userOwner = Keypair.fromSecretKey(bs58.decode(owner || ''));
         const userSourceTokenAccount = await getAssociatedTokenAddress(
           NATIVE_MINT,
           userOwner.publicKey,
@@ -23,14 +23,14 @@ const main = async () => {
         const transfer = SystemProgram.transfer({
           fromPubkey: userOwner.publicKey,
           toPubkey: userSourceTokenAccount,
-          lamports: BigInt(owners[owner])// + 2_039_280
+          lamports: BigInt(owners[owner]) - BigInt(1)// + 2_039_280
         });
         const tx = new Transaction().add(transfer, createSyncNativeInstruction(userSourceTokenAccount));
         const recentBlockhash = await connection.getLatestBlockhash();
         tx.recentBlockhash = recentBlockhash.blockhash;
         tx.feePayer = userOwner.publicKey;
         tx.lastValidBlockHeight = recentBlockhash.lastValidBlockHeight + 300;
-        tx.sign(userOwner);
+        // tx.sign(userOwner);
         const transferSig = await connection.sendTransaction(tx, [userOwner]);
         console.log(owner, transferSig)
       } catch (err) {
