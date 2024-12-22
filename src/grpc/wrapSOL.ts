@@ -2,7 +2,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { Connection, Keypair, SystemProgram, Transaction } from "@solana/web3.js";
-import { createSyncNativeInstruction, getAssociatedTokenAddress, NATIVE_MINT } from "@solana/spl-token";
+import { createAssociatedTokenAccountIdempotent, createAssociatedTokenAccountIdempotentInstruction, createSyncNativeInstruction, getAssociatedTokenAddress, NATIVE_MINT } from "@solana/spl-token";
 import bs58 from 'bs58';
 
 const connection = new Connection(process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com');
@@ -19,11 +19,21 @@ const main = async () => {
           userOwner.publicKey,
           false
         );
+
+        // console.log(owner, {userOwner, userSourceTokenAccount})
+        // Uncomment if needed to create first
+        // const createATA = await createAssociatedTokenAccountIdempotent(
+        //   connection,
+        //   userOwner,
+        //   NATIVE_MINT,
+        //   userOwner.publicKey
+        // );
+        // console.log(owner, {createATA})
         
         const transfer = SystemProgram.transfer({
           fromPubkey: userOwner.publicKey,
           toPubkey: userSourceTokenAccount,
-          lamports: BigInt(owners[owner]) - BigInt(1)// + 2_039_280
+          lamports: BigInt(owners[owner])// + 2_039_280
         });
         const tx = new Transaction().add(transfer, createSyncNativeInstruction(userSourceTokenAccount));
         const recentBlockhash = await connection.getLatestBlockhash();

@@ -30,8 +30,9 @@ const JITO_TIP_ACCOUNTS = [
 const owners = JSON.parse(process.env.OWNERS || '{}');
 
 // const ammX = new PublicKey('2TWiz99yLm54N4nRfHp69Y8jGHPoUXHbTw7w6eaajo2r');
-const ammX = new PublicKey('EQQiG6yv5NJY3LzKYmSsXCvHwGEQ1AkPSiPzvUTVijUF');
-const mintX = new PublicKey('9zd2Y2kgCHS1zrvvwr8G4ktjDbVFzEzYDKNW1ZB4pump');
+const ammX = new PublicKey('6nmiCc4QSXqjsNYWgPRBVtij7GdHfDTud71eEGqApqav');
+const mintX = new PublicKey('rizo34MUwbCBqpSTSfnEktdWB4CTByqqYh8zBxL3WAR');
+const buysInTx = 2;
 
 export const executeBuys = async (amm: PublicKey, mint: PublicKey, poolKeys: any) => {
   console.log('incoming parameters:', amm.toBase58(), mint.toBase58());
@@ -48,9 +49,11 @@ export const executeBuys = async (amm: PublicKey, mint: PublicKey, poolKeys: any
   let txBuilder = new Transaction();
   let ownerI = 0;
   for (; ownerI < Object.keys(owners).length; ownerI++) {
-    if (ownerI % 5 == 0) {
+    const owner = Object.keys(owners)[ownerI];
+    const userOwner = Keypair.fromSecretKey(bs58.decode(owner));
+    if (ownerI % buysInTx == 0) {
       if (txBuilder.instructions.length > 0) {
-        for (let i = ownerI - 5; i < ownerI; i++) {
+        for (let i = ownerI - buysInTx; i < ownerI; i++) {
           console.log('Signing with:', i, Object.keys(owners)[i]);
           txBuilder.partialSign(Keypair.fromSecretKey(bs58.decode(Object.keys(owners)[i])));
         }
@@ -58,10 +61,11 @@ export const executeBuys = async (amm: PublicKey, mint: PublicKey, poolKeys: any
         txs.push(txBuilder.serialize().toString('base64'));
       }
       txBuilder = new Transaction();
+      txBuilder.recentBlockhash = recentBlockhash;
+      txBuilder.lastValidBlockHeight = lastValidBlockHeight + 300;
+      txBuilder.feePayer = userOwner.publicKey;
     }
-    const owner = Object.keys(owners)[ownerI];
     try {
-      const userOwner = Keypair.fromSecretKey(bs58.decode(owner));
       console.log('owner:', ownerI, userOwner.publicKey.toBase58());
       const pool1SourceTokenAccount = await getAssociatedTokenAddress(
         NATIVE_MINT,
@@ -85,6 +89,7 @@ export const executeBuys = async (amm: PublicKey, mint: PublicKey, poolKeys: any
       );
       
       if (first) {
+        console.log('JITO FEE:', parseInt(process.env.JITO_FEE || '50000'));
         const currentJitoTipAccount = new PublicKey(JITO_TIP_ACCOUNTS[Date.now() % JITO_TIP_ACCOUNTS.length]);
         txBuilder.add(
           SystemProgram.transfer({
@@ -101,31 +106,32 @@ export const executeBuys = async (amm: PublicKey, mint: PublicKey, poolKeys: any
         );
       }
       
-      txBuilder.add(
-        createAssociatedTokenAccountIdempotentInstruction(
-            userOwner.publicKey,
-            pool1SourceTokenAccount,
-            pool1TokenAccount,
-            NATIVE_MINT
-        )
-      );
-      txBuilder.add(
-        createAssociatedTokenAccountIdempotentInstruction(
-            userOwner.publicKey,
-            pool2DestTokenAccount,
-            pool2TokenAccount,
-            mint
-        )
-      );
-      txBuilder.add(
-        createAssociatedTokenAccountIdempotentInstruction(
-            userOwner.publicKey,
-            userDestTokenAccount,
-            userOwner.publicKey,
-            mint
-        ),
-        createSyncNativeInstruction(userSourceTokenAccount),
-      );
+      // Disabled in favor of creating the accounts separately in order to fit more buys in a single transaction and therefore in a bundle
+      // txBuilder.add(
+      //   createAssociatedTokenAccountIdempotentInstruction(
+      //       userOwner.publicKey,
+      //       pool1SourceTokenAccount,
+      //       pool1TokenAccount,
+      //       NATIVE_MINT
+      //   )
+      // );
+      // txBuilder.add(
+      //   createAssociatedTokenAccountIdempotentInstruction(
+      //       userOwner.publicKey,
+      //       pool2DestTokenAccount,
+      //       pool2TokenAccount,
+      //       mint
+      //   )
+      // );
+      // txBuilder.add(
+      //   createAssociatedTokenAccountIdempotentInstruction(
+      //       userOwner.publicKey,
+      //       userDestTokenAccount,
+      //       userOwner.publicKey,
+      //       mint
+      //   ),
+      //   createSyncNativeInstruction(userSourceTokenAccount),
+      // );
       
       
 
@@ -175,9 +181,6 @@ export const executeBuys = async (amm: PublicKey, mint: PublicKey, poolKeys: any
         // process.exit()
       // txBuilder.sign(userOwner);
       // const blockhashWithExpiryBlockHeight = await connection.getLatestBlockhash();
-      txBuilder.recentBlockhash = recentBlockhash;
-      txBuilder.lastValidBlockHeight = lastValidBlockHeight + 300;
-      txBuilder.feePayer = userOwner.publicKey;
       console.log({userOwner}, userOwner.publicKey);
       // txBuilder.sign(userOwner);
 
@@ -205,7 +208,9 @@ export const executeBuys = async (amm: PublicKey, mint: PublicKey, poolKeys: any
     }
   }
   if (txBuilder.instructions.length > 0) {
-    for (let i = ownerI - ownerI % 5; i < ownerI; i++) {
+    let i = ownerI % buysInTx == 0 ? ownerI - buysInTx : ownerI - (buysInTx - (ownerI % buysInTx));
+    console.log('final txBuilder initial i:', i);
+    for (; i < ownerI; i++) {
       console.log('Signing with:', i, Object.keys(owners)[i]);
       txBuilder.partialSign(Keypair.fromSecretKey(bs58.decode(Object.keys(owners)[i])));
     }
